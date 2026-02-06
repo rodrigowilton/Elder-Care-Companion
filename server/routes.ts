@@ -15,47 +15,15 @@ export async function registerRoutes(
   // Setup Auth (Passport)
   setupAuth(app);
 
-  // Seed Data
-  const seed = async () => {
-    const existingAdmin = await storage.getUserByUsername("admin");
-    if (!existingAdmin) {
-      const password = await hashPassword("admin123");
-      const admin = await storage.createUser({
-        username: "admin",
-        password,
-        fullName: "System Admin",
-      });
-      // Update to admin role and extend subscription
-      await db.update(users).set({
-        role: "admin",
-        subscriptionEndDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 10)
-      }).where(eq(users.id, admin.id));
-      console.log("Seeded admin user");
-    }
-
-    const existingUser = await storage.getUserByUsername("idoso1");
-    if (!existingUser) {
-      const password = await hashPassword("123456");
-      const user = await storage.createUser({
-        username: "idoso1",
-        password,
-        fullName: "João da Silva",
-      });
-      console.log("Seeded idoso1 user");
-
-      await storage.createMedication({
-        userId: user.id,
-        name: "Losartana",
-        dosage: "50mg",
-        time: "08:00",
-        frequency: "Diariamente",
-        active: true,
-      });
-    }
+  // --- SEED DATA DESATIVADO PARA EVITAR ERRO DE CONEXÃO NO STARTUP ---
+  /* const seed = async () => {
+    // Comentamos esta lógica pois o erro ENOTFOUND impede o servidor de iniciar
+    // Você pode criar usuários manualmente pelo painel do Supabase.
   };
   seed().catch(console.error);
+  */
 
-  // Middleware to check if user is blocked or subscription expired
+  // Middleware para checar bloqueio ou assinatura expirada
   const checkAccess = (req: any, res: any, next: any) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
@@ -63,11 +31,11 @@ export async function registerRoutes(
     if (user.role === 'admin') return next();
 
     if (user.isBlocked) {
-      return res.status(403).json({ message: "Account is blocked by administrator." });
+      return res.status(403).json({ message: "Sua conta está bloqueada pelo administrador." });
     }
 
     if (new Date() > new Date(user.subscriptionEndDate)) {
-      return res.status(403).json({ message: "Subscription expired. Please contact admin." });
+      return res.status(403).json({ message: "Assinatura expirada. Contate o admin." });
     }
 
     next();
@@ -79,7 +47,7 @@ export async function registerRoutes(
     next();
   };
 
-  // Medications
+  // Medicamentos
   app.get(api.medications.list.path, checkAccess, async (req, res) => {
     const meds = await storage.getMedications(req.user!.id);
     res.json(meds);
@@ -94,7 +62,7 @@ export async function registerRoutes(
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message });
       } else {
-        res.status(500).json({ message: "Internal server error" });
+        res.status(500).json({ message: "Erro interno no servidor" });
       }
     }
   });
@@ -104,7 +72,7 @@ export async function registerRoutes(
     res.sendStatus(204);
   });
 
-  // Appointments
+  // Consultas (Appointments)
   app.get(api.appointments.list.path, checkAccess, async (req, res) => {
     const appts = await storage.getAppointments(req.user!.id);
     res.json(appts);
@@ -113,7 +81,6 @@ export async function registerRoutes(
   app.post(api.appointments.create.path, checkAccess, async (req, res) => {
     try {
       const input = api.appointments.create.input.parse(req.body);
-      // Ensure date is a Date object (zod coerce might be needed or frontend sends ISO string)
       const appt = await storage.createAppointment({ 
         ...input, 
         userId: req.user!.id,
@@ -124,7 +91,7 @@ export async function registerRoutes(
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message });
       } else {
-        res.status(500).json({ message: "Internal server error" });
+        res.status(500).json({ message: "Erro interno no servidor" });
       }
     }
   });
@@ -134,7 +101,7 @@ export async function registerRoutes(
     res.sendStatus(204);
   });
 
-  // Panic
+  // Pânico
   app.post(api.panic.trigger.path, checkAccess, async (req, res) => {
     const log = await storage.createPanicLog(req.user!.id);
     res.status(201).json(log);

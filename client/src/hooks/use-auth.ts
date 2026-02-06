@@ -1,73 +1,84 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type InsertUser } from "@shared/routes";
-import { z } from "zod";
+import { supabase } from "./supabase"; // Importando o cliente que criamos
 import { useLocation } from "wouter";
 
 export function useAuth() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
+  // 1. Verifica se o usuário está logado no Supabase
   const { data: user, isLoading, error } = useQuery({
-    queryKey: [api.auth.me.path],
+    queryKey: ["/api/auth/me"],
     queryFn: async () => {
-      const res = await fetch(api.auth.me.path);
-      if (res.status === 401) return null;
-      if (!res.ok) throw new Error("Failed to fetch user");
-      return api.auth.me.responses[200].parse(await res.json());
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) return null;
+
+      // Busca dados extras (como is_blocked) na tabela profiles
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      return { ...user, ...profile };
     },
     retry: false,
   });
 
+  // 2. Mutação de Login com Verificação de Bloqueio
   const loginMutation = useMutation({
-    mutationFn: async (credentials: { username: string; password: string }) => {
-      const res = await fetch(api.auth.login.path, {
-        method: api.auth.login.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credentials),
+    mutationFn: async (credentials: { email: string; password: string }) => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password,
       });
 
-      if (!res.ok) {
-        if (res.status === 401) {
-          throw new Error("Usuário ou senha inválidos");
-        }
-        throw new Error("Erro ao fazer login");
+      if (error) throw new Error(error.message);
+
+      // VERIFICAÇÃO DE BLOQUEIO
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_blocked')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profile?.is_blocked) {
+        await supabase.auth.signOut();
+        throw new Error("Sua conta está bloqueada pelo administrador.");
       }
-      return api.auth.login.responses[200].parse(await res.json());
+
+      return { ...data.user, ...profile };
     },
     onSuccess: (data) => {
-      queryClient.setQueryData([api.auth.me.path], data);
+      queryClient.setQueryData(["/api/auth/me"], data);
       setLocation("/");
     },
   });
 
+  // 3. Mutação de Cadastro (Register)
   const registerMutation = useMutation({
-    mutationFn: async (data: InsertUser) => {
-      const res = await fetch(api.auth.register.path, {
-        method: api.auth.register.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+    mutationFn: async (data: { email: string; password: string }) => {
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
       });
 
-      if (!res.ok) {
-        if (res.status === 400) {
-          throw new Error("Dados inválidos ou usuário já existe");
-        }
-        throw new Error("Erro ao registrar");
-      }
-      return api.auth.register.responses[201].parse(await res.json());
+      if (error) throw new Error(error.message);
+      return authData.user;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData([api.auth.me.path], data);
+      queryClient.setQueryData(["/api/auth/me"], data);
       setLocation("/");
     },
   });
 
+  // 4. Mutação de Logout
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await fetch(api.auth.logout.path, { method: api.auth.logout.method });
+      await supabase.auth.signOut();
     },
     onSuccess: () => {
-      queryClient.setQueryData([api.auth.me.path], null);
+      queryClient.setQueryData(["/api/auth/me"], null);
       setLocation("/auth");
     },
   });

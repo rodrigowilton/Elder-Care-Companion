@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import 'dotenv/config'; // Garante o carregamento das variáveis de ambiente
 
 const app = express();
 const httpServer = createServer(app);
@@ -60,6 +61,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Registra as rotas da API (incluindo a conexão com o banco)
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -75,9 +77,6 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -85,19 +84,24 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
+  // --- LÓGICA DE PORTA ADAPTATIVA (WINDOWS VS DEBIAN) ---
+  const isWindows = process.platform === "win32";
+  
+  // No Windows usamos 5001 para evitar conflito. No Debian usamos a porta do sistema ou 5000.
+  const port = parseInt(process.env.PORT || (isWindows ? "5001" : "5000"), 10);
+  
+  // No Windows usamos '127.0.0.1' por segurança/permissão. No Debian usamos '0.0.0.0' para deploy.
+  const host = isWindows ? "127.0.0.1" : "0.0.0.0";
+
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host,
+      // Desativamos reusePort no Windows (causa o erro ENOTSUP)
+      ...(isWindows ? {} : { reusePort: true }),
     },
     () => {
-      log(`serving on port ${port}`);
+      log(`servidor rodando em http://${host}:${port}`);
     },
   );
 })();

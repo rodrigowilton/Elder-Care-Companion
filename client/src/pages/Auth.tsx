@@ -3,22 +3,25 @@ import { useAuth } from "@/hooks/use-auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { insertUserSchema } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeartHandshake } from "lucide-react";
 import { motion } from "framer-motion";
 
+// 1. Esquema ajustado para E-mail (padrão Supabase)
 const loginSchema = z.object({
-  username: z.string().min(1, "Digite seu usuário"),
+  email: z.string().email("Digite um e-mail válido"),
   password: z.string().min(1, "Digite sua senha"),
 });
 
-const registerSchema = insertUserSchema.extend({
+const registerSchema = z.object({
+  email: z.string().email("Digite um e-mail válido"),
+  fullName: z.string().min(2, "Digite seu nome completo"),
+  password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Senhas não conferem",
@@ -32,12 +35,12 @@ export default function AuthPage() {
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { username: "", password: "" },
+    defaultValues: { email: "", password: "" },
   });
 
   const registerForm = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { username: "", password: "", fullName: "", confirmPassword: "" },
+    defaultValues: { email: "", password: "", fullName: "", confirmPassword: "" },
   });
 
   async function onLogin(data: z.infer<typeof loginSchema>) {
@@ -54,7 +57,6 @@ export default function AuthPage() {
 
   async function onRegister(data: z.infer<typeof registerSchema>) {
     try {
-      // Remove confirmPassword before sending to API
       const { confirmPassword, ...apiData } = data;
       await register.mutateAsync(apiData);
       toast({
@@ -79,19 +81,19 @@ export default function AuthPage() {
         className="w-full max-w-md"
       >
         <div className="flex flex-col items-center mb-8">
-          <div className="w-20 h-20 bg-primary rounded-3xl shadow-xl shadow-primary/20 flex items-center justify-center mb-4 rotate-3">
+          <div className="w-20 h-20 bg-primary rounded-3xl shadow-xl flex items-center justify-center mb-4 rotate-3">
             <HeartHandshake className="text-white w-10 h-10" />
           </div>
           <h1 className="text-4xl font-display font-bold text-primary">Street50+</h1>
           <p className="text-muted-foreground font-medium text-lg">Cuidando de quem importa</p>
         </div>
 
-        <Card className="border-0 shadow-2xl shadow-primary/5 overflow-hidden">
+        <Card className="border-0 shadow-2xl overflow-hidden">
           <CardHeader className="bg-primary/5 pb-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 h-14 rounded-xl bg-background p-1">
-                <TabsTrigger value="login" className="rounded-lg text-lg font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground h-full transition-all">Entrar</TabsTrigger>
-                <TabsTrigger value="register" className="rounded-lg text-lg font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground h-full transition-all">Cadastrar</TabsTrigger>
+                <TabsTrigger value="login" className="rounded-lg text-lg font-bold">Entrar</TabsTrigger>
+                <TabsTrigger value="register" className="rounded-lg text-lg font-bold">Cadastrar</TabsTrigger>
               </TabsList>
             </Tabs>
           </CardHeader>
@@ -102,12 +104,12 @@ export default function AuthPage() {
                   <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-6">
                     <FormField
                       control={loginForm.control}
-                      name="username"
+                      name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-base font-bold text-foreground">Usuário</FormLabel>
+                          <FormLabel className="font-bold">E-mail</FormLabel>
                           <FormControl>
-                            <Input placeholder="Seu nome de usuário" className="input-large" {...field} />
+                            <Input placeholder="seu@email.com" type="email" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -118,20 +120,21 @@ export default function AuthPage() {
                       name="password"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-base font-bold text-foreground">Senha</FormLabel>
+                          <FormLabel className="font-bold">Senha</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="Sua senha" className="input-large" {...field} />
+                            <Input type="password" placeholder="Sua senha" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="btn-large w-full bg-primary hover:bg-primary/90 text-white" disabled={login.isPending}>
+                    <Button type="submit" className="w-full bg-primary" disabled={login.isPending}>
                       {login.isPending ? "Entrando..." : "Entrar no App"}
                     </Button>
                   </form>
                 </Form>
               </TabsContent>
+
               <TabsContent value="register">
                 <Form {...registerForm}>
                   <form onSubmit={registerForm.handleSubmit(onRegister)} className="space-y-4">
@@ -140,9 +143,9 @@ export default function AuthPage() {
                       name="fullName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-base font-bold text-foreground">Nome Completo</FormLabel>
+                          <FormLabel className="font-bold">Nome Completo</FormLabel>
                           <FormControl>
-                            <Input placeholder="Seu nome completo" className="input-large" {...field} />
+                            <Input placeholder="Seu nome completo" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -150,12 +153,12 @@ export default function AuthPage() {
                     />
                     <FormField
                       control={registerForm.control}
-                      name="username"
+                      name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-base font-bold text-foreground">Usuário</FormLabel>
+                          <FormLabel className="font-bold">E-mail</FormLabel>
                           <FormControl>
-                            <Input placeholder="Escolha um usuário" className="input-large" {...field} />
+                            <Input placeholder="seu@email.com" type="email" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -166,9 +169,9 @@ export default function AuthPage() {
                       name="password"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-base font-bold text-foreground">Senha</FormLabel>
+                          <FormLabel className="font-bold">Senha</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="Crie uma senha" className="input-large" {...field} />
+                            <Input type="password" placeholder="Crie uma senha" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -179,15 +182,15 @@ export default function AuthPage() {
                       name="confirmPassword"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-base font-bold text-foreground">Confirmar Senha</FormLabel>
+                          <FormLabel className="font-bold">Confirmar Senha</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="Repita a senha" className="input-large" {...field} />
+                            <Input type="password" placeholder="Repita a senha" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="btn-large w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground mt-4" disabled={register.isPending}>
+                    <Button type="submit" className="w-full bg-secondary" disabled={register.isPending}>
                       {register.isPending ? "Criando..." : "Criar Conta Grátis"}
                     </Button>
                   </form>
